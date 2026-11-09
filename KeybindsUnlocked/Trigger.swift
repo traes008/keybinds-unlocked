@@ -33,16 +33,6 @@ enum ModifierKey: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .command: return "⌘"
-        case .option: return "⌥"
-        case .control: return "⌃"
-        case .shift: return "⇧"
-        case .function: return "Fn"
-        }
-    }
-
     static let allMasks: UInt64 = allCases.reduce(0) { $0 | $1.mask }
 }
 

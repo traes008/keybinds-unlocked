@@ -48,6 +48,9 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Open at Login", isOn: Binding(get: { opensAtLogin }, set: setOpensAtLogin))
+                Button("Quit Keybinds Unlocked") { NSApp.terminate(nil) }
+            } footer: {
+                Text("Runs in the background. Open the app again to get back here.")
             }
         }
         .formStyle(.grouped)

@@ -37,11 +37,4 @@ final class AppState: ObservableObject {
         tapWindow = defaults.object(forKey: Key.tapWindow) as? Double ?? 0.3
         shortcut = defaults.data(forKey: Key.shortcut).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) }
     }
-
-    var summary: String {
-        switch mode {
-        case .doubleTap: return "Double-tap \(modifier.symbol) opens Mission Control"
-        case .shortcut: return shortcut.map { "\($0.display) opens Mission Control" } ?? "No shortcut set"
-        }
-    }
 }

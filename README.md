@@ -1,6 +1,6 @@
 # Keybinds Unlocked
 
-A macOS menu bar app that opens Mission Control when you double-tap a modifier key or press a key combination of your choice.
+A macOS background app that opens Mission Control when you double-tap a modifier key or press a key combination of your choice.
 
 ## How it works
 
