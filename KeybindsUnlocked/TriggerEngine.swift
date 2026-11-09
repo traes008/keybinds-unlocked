@@ -76,8 +76,10 @@ final class TriggerEngine {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
         case .flagsChanged:
-            if detector.flagsChanged(event.flags.rawValue, at: ProcessInfo.processInfo.systemUptime) {
+            let now = ProcessInfo.processInfo.systemUptime
+            if detector.flagsChanged(event.flags.rawValue, at: now) {
                 fire() // outside the event callback, so typing never waits on it
+                NSLog("Keybinds Unlocked: double tap handled %.0f ms after the key press", (now - Double(event.timestamp) / 1e9) * 1000)
             }
         default:
             detector.interrupted()
