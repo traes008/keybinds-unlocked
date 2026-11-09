@@ -17,6 +17,6 @@ Open `KeybindsUnlocked.xcodeproj` in Xcode and press Run, or:
 xcodebuild -project KeybindsUnlocked.xcodeproj -target KeybindsUnlocked -configuration Release SYMROOT="$PWD/build" build
 ```
 
-The build is signed to run locally, so macOS may ask for Accessibility again after each rebuild.
+Signed with a free personal Apple Development certificate (set in the project), so macOS keeps the Accessibility permission across rebuilds.
 
 Don't leave the Hammerspoon double-tap running alongside this: both would fire and cancel each other out.
