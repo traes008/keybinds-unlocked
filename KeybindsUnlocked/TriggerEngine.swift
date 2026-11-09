@@ -137,9 +137,24 @@ final class TriggerEngine {
 
     // MARK: Action
 
+    private typealias DockNotification = @convention(c) (CFString, Int32) -> Void
+
+    /// Asks the Dock directly, which is instant. macOS has no public API for this, so the private
+    /// function is looked up at runtime; if Apple removes it, `fire` falls back to launching the
+    /// Mission Control app, which works but takes noticeably longer.
+    private static let sendToDock: DockNotification? = {
+        let path = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
+        guard let handle = dlopen(path, RTLD_LAZY), let symbol = dlsym(handle, "CoreDockSendNotification") else { return nil }
+        return unsafeBitCast(symbol, to: DockNotification.self)
+    }()
+
     private func fire() {
         DispatchQueue.main.async {
-            _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Mission Control"])
+            if let sendToDock = Self.sendToDock {
+                sendToDock("com.apple.expose.awake" as CFString, 0)
+            } else {
+                _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Mission Control"])
+            }
         }
     }
 }
