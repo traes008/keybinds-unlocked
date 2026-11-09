@@ -40,7 +40,8 @@ final class TriggerEngine {
     // MARK: Double tap
 
     private func armTap() {
-        guard tap == nil else { return }
+        // Without permission macOS may still hand back a tap, but a disabled one that never recovers
+        guard tap == nil, AXIsProcessTrusted() else { return }
 
         let types: [CGEventType] = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
