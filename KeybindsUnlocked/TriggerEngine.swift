@@ -43,8 +43,8 @@ final class TriggerEngine {
         // Without permission macOS may still hand back a tap, but a disabled one that never recovers
         guard tap == nil, AXIsProcessTrusted() else { return }
 
-        let types: [CGEventType] = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
-        let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
+        // Modifier changes only, so the app isn't woken by (or in the path of) ordinary typing and clicks
+        let mask = CGEventMask(1) << CGEventType.flagsChanged.rawValue
         // Not .listenOnly: that also needs Input Monitoring, and without it comes back disabled.
         // The callback hands every event back unchanged.
         guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
@@ -77,13 +77,19 @@ final class TriggerEngine {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
         case .flagsChanged:
             let now = ProcessInfo.processInfo.systemUptime
-            if detector.flagsChanged(event.flags.rawValue, at: now) {
+            if detector.flagsChanged(event.flags.rawValue, at: now, lastOtherInputAt: now - Self.secondsSinceOtherInput()) {
                 fire() // outside the event callback, so typing never waits on it
-                NSLog("Keybinds Unlocked: double tap handled %.0f ms after the key press", (now - Double(event.timestamp) / 1e9) * 1000)
             }
         default:
-            detector.interrupted()
+            break
         }
+    }
+
+    /// How long ago a key or mouse button was last pressed. Asking the system when needed means
+    /// those events don't have to be watched.
+    private static func secondsSinceOtherInput() -> TimeInterval {
+        let types: [CGEventType] = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        return types.map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }.min() ?? .infinity
     }
 
     /// Only double tap needs Accessibility, because only it has to watch the keyboard.

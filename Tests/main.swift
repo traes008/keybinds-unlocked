@@ -16,37 +16,39 @@ let shift = ModifierKey.shift.mask
 let option = ModifierKey.option.mask
 
 /// Plays flag values at the given times; returns how many double taps were recognised.
-func taps(_ events: [(UInt64, Double)], key: ModifierKey = .command, window: Double = 0.3) -> Int {
+/// `otherInputAt` is when a key or mouse button was pressed, if one was.
+func taps(_ events: [(UInt64, Double)], key: ModifierKey = .command, window: Double = 0.3, otherInputAt: Double? = nil) -> Int {
     var detector = DoubleTapDetector()
     detector.key = key
     detector.tapWindow = window
-    return events.filter { detector.flagsChanged($0.0, at: $0.1) }.count
+    return events.filter { event in
+        // Like the real system: only input that has already happened is known
+        let last = otherInputAt.flatMap { $0 <= event.1 ? $0 : nil } ?? -.infinity
+        return detector.flagsChanged(event.0, at: event.1, lastOtherInputAt: last)
+    }.count
 }
 
-let quick: [(UInt64, Double)] = [(cmd, 0), (0, 0.05), (cmd, 0.15), (0, 0.2)]
+// Times start at 10 so "long before" is a real moment, as it is with uptime
+let quick: [(UInt64, Double)] = [(cmd, 10), (0, 10.05), (cmd, 10.15), (0, 10.2)]
 check("double tap fires", taps(quick), 1)
-check("second tap too late", taps([(cmd, 0), (0, 0.05), (cmd, 0.5), (0, 0.55)]), 0)
-check("longer tap window accepts it", taps([(cmd, 0), (0, 0.05), (cmd, 0.5), (0, 0.55)], window: 0.6), 1)
-check("first press held too long", taps([(cmd, 0), (0, 0.5), (cmd, 0.6), (0, 0.65)]), 0)
-check("fires on the second press, before its release", taps([(cmd, 0), (0, 0.05), (cmd, 0.1)]), 1)
-check("holding the second press doesn't fire again", taps([(cmd, 0), (0, 0.05), (cmd, 0.1), (0, 0.6)]), 1)
-check("three quick taps fire once", taps(quick + [(cmd, 0.3), (0, 0.35)]), 1)
-check("four quick taps fire twice", taps(quick + [(cmd, 0.3), (0, 0.35), (cmd, 0.45), (0, 0.5)]), 2)
-check("another modifier cancels", taps([(cmd, 0), (0, 0.05), (cmd | shift, 0.1), (cmd, 0.15), (0, 0.2)]), 0)
-check("shift held while tapping cancels", taps([(shift, 0), (shift | cmd, 0.02), (shift, 0.05), (shift | cmd, 0.1), (shift, 0.15)]), 0)
-check("other key can be chosen", taps([(option, 0), (0, 0.05), (option, 0.15), (0, 0.2)], key: .option), 1)
+check("second tap too late", taps([(cmd, 10), (0, 10.05), (cmd, 10.5), (0, 10.55)]), 0)
+check("longer tap window accepts it", taps([(cmd, 10), (0, 10.05), (cmd, 10.5), (0, 10.55)], window: 0.6), 1)
+check("first press held too long", taps([(cmd, 10), (0, 10.5), (cmd, 10.6), (0, 10.65)]), 0)
+check("fires on the second press, before its release", taps([(cmd, 10), (0, 10.05), (cmd, 10.1)]), 1)
+check("holding the second press doesn't fire again", taps([(cmd, 10), (0, 10.05), (cmd, 10.1), (0, 10.6)]), 1)
+check("three quick taps fire once", taps(quick + [(cmd, 10.3), (0, 10.35)]), 1)
+check("four quick taps fire twice", taps(quick + [(cmd, 10.3), (0, 10.35), (cmd, 10.45), (0, 10.5)]), 2)
+check("another modifier cancels", taps([(cmd, 10), (0, 10.05), (cmd | shift, 10.1), (cmd, 10.15), (0, 10.2)]), 0)
+check("shift held while tapping cancels", taps([(shift, 10), (shift | cmd, 10.02), (shift, 10.05), (shift | cmd, 10.1), (shift, 10.15)]), 0)
+check("other key can be chosen", taps([(option, 10), (0, 10.05), (option, 10.15), (0, 10.2)], key: .option), 1)
 check("command doesn't trigger option", taps(quick, key: .option), 0)
 
-var interruptedDetector = DoubleTapDetector()
-_ = interruptedDetector.flagsChanged(cmd, at: 0)
-_ = interruptedDetector.flagsChanged(0, at: 0.05)
-interruptedDetector.interrupted()
-check("a key press between taps cancels", interruptedDetector.flagsChanged(cmd, at: 0.1), false)
-
-var heldDetector = DoubleTapDetector()
-_ = heldDetector.flagsChanged(cmd, at: 0)
-heldDetector.interrupted() // Cmd+C
-check("cmd+key isn't a tap", heldDetector.flagsChanged(0, at: 0.05), false)
+check("typing well before the taps doesn't cancel", taps(quick, otherInputAt: 9.5), 1)
+check("cmd+key isn't a tap", taps(quick, otherInputAt: 10.03), 0)
+check("a key press between taps cancels", taps(quick, otherInputAt: 10.1), 0)
+check("a key right before the first press cancels", taps(quick, otherInputAt: 9.99), 0)
+check("a key after it fired doesn't matter", taps(quick, otherInputAt: 10.17), 1)
+check("cmd+C then cmd+V quickly doesn't fire", taps([(cmd, 10), (0, 10.12), (cmd, 10.25), (0, 10.4)], otherInputAt: 10.06), 0)
 
 check("shortcut: ctrl+opt+M", Shortcut.make(keyCode: 46, held: [.control, .option], characters: "m"),
       Shortcut(keyCode: 46, carbonModifiers: 0x1800, display: "⌃⌥M"))

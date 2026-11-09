@@ -45,29 +45,36 @@ struct DoubleTapDetector {
     /// Holding the key longer than this isn't a tap.
     var maxTapLength: TimeInterval = 0.3
 
+    /// A key or click this close before the first press also cancels. The press is timed when it
+    /// reaches the app, slightly after it happened, so this keeps a key pressed right after it
+    /// from slipping through.
+    private static let inputMargin: TimeInterval = 0.03
+
     private var isDown = false
     private var isClean = false
-    private var downAt: TimeInterval = 0
+    private var tapStartedAt: TimeInterval = 0
     private var lastTapAt: TimeInterval = -.infinity
 
-    /// Feed every modifier change. Returns true when this one completes a double tap.
-    /// That is the second press, not its release: waiting for the release feels sluggish.
-    mutating func flagsChanged(_ flags: UInt64, at now: TimeInterval) -> Bool {
+    /// Feed every modifier change, with the time a key or mouse button was last pressed.
+    /// Returns true when this change completes a double tap. That is the second press, not its
+    /// release: waiting for the release feels sluggish.
+    mutating func flagsChanged(_ flags: UInt64, at now: TimeInterval, lastOtherInputAt: TimeInterval) -> Bool {
         let keyHeld = flags & key.mask != 0
         let otherHeld = flags & (ModifierKey.allMasks & ~key.mask) != 0
+        let interrupted = lastOtherInputAt > tapStartedAt - Self.inputMargin
 
         if keyHeld && !isDown {
             isDown = true
-            downAt = now
-            if !otherHeld && now - lastTapAt <= tapWindow {
+            if !otherHeld && !interrupted && now - lastTapAt <= tapWindow {
                 lastTapAt = -.infinity
                 isClean = false // this press is used up, so its release doesn't start a new double tap
                 return true
             }
+            tapStartedAt = now
             isClean = !otherHeld
         } else if !keyHeld && isDown {
             isDown = false
-            let isTap = isClean && !otherHeld && now - downAt <= maxTapLength
+            let isTap = isClean && !otherHeld && !interrupted && now - tapStartedAt <= maxTapLength
             lastTapAt = isTap ? now : -.infinity
         } else {
             // Another modifier changed
@@ -75,12 +82,6 @@ struct DoubleTapDetector {
             lastTapAt = -.infinity
         }
         return false
-    }
-
-    /// A key or mouse button was pressed.
-    mutating func interrupted() {
-        isClean = false
-        lastTapAt = -.infinity
     }
 }
 

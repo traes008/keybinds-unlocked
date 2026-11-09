@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Runs in the background with no menu bar icon. Opening the app again shows its settings.
 @main
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let state = AppState()
     private lazy var engine = TriggerEngine(state: state)
     private var settingsWindow: NSWindow?
@@ -32,11 +32,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.title = "Keybinds Unlocked"
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.contentView = NSHostingView(rootView: SettingsView(state: state))
             window.center()
             settingsWindow = window
         }
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Frees the settings window's memory; it's rebuilt the next time it's opened.
+    func windowWillClose(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in self?.settingsWindow = nil }
     }
 }
