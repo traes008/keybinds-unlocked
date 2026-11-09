@@ -45,8 +45,9 @@ final class TriggerEngine {
 
         let types: [CGEventType] = [.flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
-        // Listen-only: this can never block or alter what you type
-        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+        // Not .listenOnly: that also needs Input Monitoring, and without it comes back disabled.
+        // The callback hands every event back unchanged.
+        guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                               eventsOfInterest: mask, callback: Self.tapCallback,
                                               userInfo: Unmanaged.passUnretained(self).toOpaque()) else { return }
         let source = CFMachPortCreateRunLoopSource(nil, created, 0)

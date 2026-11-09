@@ -4,7 +4,7 @@ A macOS background app that opens Mission Control when you double-tap a modifier
 
 ## How it works
 
-- **Double tap** watches the keyboard through a listen-only event tap, so it needs Accessibility permission and can never block or change what you type. Any key, click or other modifier between the taps cancels it.
+- **Double tap** watches the keyboard through an event tap, so it needs Accessibility permission. Every event is passed on unchanged. Any key, click or other modifier between the taps cancels it.
 - **Key shortcut** uses a system hot key, which needs no permission.
 
 `KeybindsUnlocked/Trigger.swift` holds the logic and `scripts/check.sh` tests it.
