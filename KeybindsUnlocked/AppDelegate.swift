@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Frees the settings window's memory; it's rebuilt the next time it's opened.
     func windowWillClose(_ notification: Notification) {
+        state.recordingID = nil // a recording left open would keep every keybind switched off
         DispatchQueue.main.async { [weak self] in self?.settingsWindow = nil }
     }
 }

@@ -2,51 +2,74 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 
-/// Watches for the chosen trigger and opens Mission Control when it happens.
+/// Watches for every keybind's trigger and opens Mission Control when one happens.
 final class TriggerEngine {
     private let state: AppState
-    private var detector = DoubleTapDetector()
+    private var detectors: [DoubleTapDetector] = []
+    private var mouseButtons: Set<Int64> = []
+    /// Bound buttons that are held down: their release is swallowed too, so no app sees half a click.
+    private var swallowedButtons: Set<Int64> = []
 
     private var tap: CFMachPort?
     private var tapSource: CFRunLoopSource?
+    private var tapMask: CGEventMask = 0
     private var permissionTimer: Timer?
     private var didPromptForPermission = false
 
-    private var hotKey: EventHotKeyRef?
+    private var hotKeys: [EventHotKeyRef] = []
+    private var armedShortcuts: [Shortcut] = []
     private var hotKeyHandlerInstalled = false
 
     init(state: AppState) {
         self.state = state
     }
 
-    /// Arms whichever trigger is selected and disarms the other. Safe to call repeatedly.
+    /// Arms what the keybinds need and disarms the rest. Safe to call repeatedly.
     func configure() {
-        detector.key = state.modifier
-        detector.tapWindow = state.tapWindow
+        // Nothing fires while a shortcut or button is being recorded
+        let keybinds = state.isRecording ? [] : state.keybinds
 
-        if state.isRecording {
-            removeTap()
-            removeHotKey()
-        } else if state.mode == .doubleTap {
-            removeHotKey()
-            armTap()
-        } else {
-            removeTap()
-            armHotKey()
+        var modifiers: [ModifierKey] = []
+        var buttons: Set<Int64> = []
+        var shortcuts: [(id: UUID, shortcut: Shortcut)] = []
+        for keybind in keybinds {
+            switch keybind.trigger {
+            case .doubleTap(let key): if !modifiers.contains(key) { modifiers.append(key) }
+            case .mouseButton(let number?): buttons.insert(Int64(number))
+            case .shortcut(let shortcut?): shortcuts.append((keybind.id, shortcut))
+            case .mouseButton(nil), .shortcut(nil): break
+            }
         }
-        updatePermissionState()
+
+        detectors = modifiers.map {
+            var detector = DoubleTapDetector()
+            detector.key = $0
+            detector.tapWindow = state.tapWindow
+            return detector
+        }
+        mouseButtons = buttons
+
+        // Only what is bound, so the app isn't woken by (or in the path of) ordinary typing and clicks
+        var mask: CGEventMask = 0
+        if !detectors.isEmpty { mask |= CGEventMask(1) << CGEventType.flagsChanged.rawValue }
+        if !buttons.isEmpty {
+            mask |= CGEventMask(1) << CGEventType.otherMouseDown.rawValue | CGEventMask(1) << CGEventType.otherMouseUp.rawValue
+        }
+        armTap(mask)
+        armHotKeys(shortcuts)
+        updatePermissionState(needsTap: mask != 0)
     }
 
-    // MARK: Double tap
+    // MARK: Double tap and mouse buttons
 
-    private func armTap() {
+    private func armTap(_ mask: CGEventMask) {
+        if tap != nil && mask == tapMask { return }
+        removeTap()
         // Without permission macOS may still hand back a tap, but a disabled one that never recovers
-        guard tap == nil, AXIsProcessTrusted() else { return }
+        guard mask != 0, AXIsProcessTrusted() else { return }
 
-        // Modifier changes only, so the app isn't woken by (or in the path of) ordinary typing and clicks
-        let mask = CGEventMask(1) << CGEventType.flagsChanged.rawValue
         // Not .listenOnly: that also needs Input Monitoring, and without it comes back disabled.
-        // The callback hands every event back unchanged.
+        // The callback hands every event back unchanged, except presses of a bound mouse button.
         guard let created = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                               eventsOfInterest: mask, callback: Self.tapCallback,
                                               userInfo: Unmanaged.passUnretained(self).toOpaque()) else { return }
@@ -55,6 +78,7 @@ final class TriggerEngine {
         CGEvent.tapEnable(tap: created, enable: true)
         tap = created
         tapSource = source
+        tapMask = mask
     }
 
     private func removeTap() {
@@ -62,27 +86,42 @@ final class TriggerEngine {
         if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
         tap = nil
         tapSource = nil
+        tapMask = 0
     }
 
     private static let tapCallback: CGEventTapCallBack = { _, type, event, refcon in
-        if let refcon {
-            Unmanaged<TriggerEngine>.fromOpaque(refcon).takeUnretainedValue().handle(type, event)
+        if let refcon, Unmanaged<TriggerEngine>.fromOpaque(refcon).takeUnretainedValue().handle(type, event) {
+            return nil
         }
         return Unmanaged.passUnretained(event)
     }
 
-    private func handle(_ type: CGEventType, _ event: CGEvent) {
+    /// Returns true to swallow the event, so no other app sees it.
+    private func handle(_ type: CGEventType, _ event: CGEvent) -> Bool {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
         case .flagsChanged:
             let now = ProcessInfo.processInfo.systemUptime
-            if detector.flagsChanged(event.flags.rawValue, at: now, lastOtherInputAt: now - Self.secondsSinceOtherInput()) {
-                fire() // outside the event callback, so typing never waits on it
+            let lastOtherInputAt = now - Self.secondsSinceOtherInput()
+            var fired = false
+            for index in detectors.indices
+            where detectors[index].flagsChanged(event.flags.rawValue, at: now, lastOtherInputAt: lastOtherInputAt) {
+                fired = true
             }
+            if fired { fire() } // outside the event callback, so typing never waits on it
+        case .otherMouseDown:
+            let button = event.getIntegerValueField(.mouseEventButtonNumber)
+            guard mouseButtons.contains(button) else { return false }
+            swallowedButtons.insert(button)
+            fire()
+            return true
+        case .otherMouseUp:
+            return swallowedButtons.remove(event.getIntegerValueField(.mouseEventButtonNumber)) != nil
         default:
             break
         }
+        return false
     }
 
     /// How long ago a key or mouse button was last pressed. Asking the system when needed means
@@ -92,9 +131,9 @@ final class TriggerEngine {
         return types.map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }.min() ?? .infinity
     }
 
-    /// Only double tap needs Accessibility, because only it has to watch the keyboard.
-    private func updatePermissionState() {
-        let needed = state.mode == .doubleTap && !state.isRecording && tap == nil
+    /// Double taps and mouse buttons need Accessibility, because they have to watch input. Key shortcuts don't.
+    private func updatePermissionState(needsTap: Bool) {
+        let needed = needsTap && tap == nil
         if state.needsPermission != needed { state.needsPermission = needed }
 
         guard needed else {
@@ -111,26 +150,29 @@ final class TriggerEngine {
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.configure() }
     }
 
-    // MARK: Key shortcut
+    // MARK: Key shortcuts
 
-    private func armHotKey() {
-        removeHotKey()
-        var unavailable = false
-        if let shortcut = state.shortcut {
+    private func armHotKeys(_ shortcuts: [(id: UUID, shortcut: Shortcut)]) {
+        // Unchanged shortcuts stay registered: this runs on every settings change
+        guard shortcuts.map(\.shortcut) != armedShortcuts else { return }
+        hotKeys.forEach { UnregisterEventHotKey($0) }
+        hotKeys = []
+        armedShortcuts = shortcuts.map(\.shortcut)
+
+        var unavailable: Set<UUID> = []
+        for (index, entry) in shortcuts.enumerated() {
             installHotKeyHandler()
             var ref: EventHotKeyRef?
-            let id = EventHotKeyID(signature: OSType(0x4B42554E), id: 1) // "KBUN"
-            let status = RegisterEventHotKey(shortcut.keyCode, shortcut.carbonModifiers, id,
+            let id = EventHotKeyID(signature: OSType(0x4B42554E), id: UInt32(index + 1)) // "KBUN"
+            let status = RegisterEventHotKey(entry.shortcut.keyCode, entry.shortcut.carbonModifiers, id,
                                              GetApplicationEventTarget(), 0, &ref)
-            hotKey = ref
-            unavailable = status != noErr
+            if status == noErr, let ref {
+                hotKeys.append(ref)
+            } else {
+                unavailable.insert(entry.id)
+            }
         }
-        if state.shortcutUnavailable != unavailable { state.shortcutUnavailable = unavailable }
-    }
-
-    private func removeHotKey() {
-        if let hotKey { UnregisterEventHotKey(hotKey) }
-        hotKey = nil
+        if state.unavailableShortcuts != unavailable { state.unavailableShortcuts = unavailable }
     }
 
     private func installHotKeyHandler() {

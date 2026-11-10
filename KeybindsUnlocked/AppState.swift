@@ -3,38 +3,41 @@ import Foundation
 /// What the user chose, saved between launches, plus what the settings window needs to show.
 final class AppState: ObservableObject {
     private enum Key {
-        static let mode = "mode", modifier = "modifier", tapWindow = "tapWindow", shortcut = "shortcut"
+        static let keybinds = "keybinds", tapWindow = "tapWindow"
+        // From the version that had a single trigger
+        static let mode = "mode", modifier = "modifier", shortcut = "shortcut"
     }
 
-    /// Called after anything that changes how the trigger should be armed.
+    /// Called after anything that changes how the keybinds should be armed.
     var onChange: (() -> Void)?
 
     private let defaults = UserDefaults.standard
 
-    @Published var mode: TriggerMode {
-        didSet { defaults.set(mode.rawValue, forKey: Key.mode); onChange?() }
-    }
-    @Published var modifier: ModifierKey {
-        didSet { defaults.set(modifier.rawValue, forKey: Key.modifier); onChange?() }
+    @Published var keybinds: [Keybind] {
+        didSet { defaults.set(try? JSONEncoder().encode(keybinds), forKey: Key.keybinds); onChange?() }
     }
     @Published var tapWindow: Double {
         didSet { defaults.set(tapWindow, forKey: Key.tapWindow); onChange?() }
     }
-    @Published var shortcut: Shortcut? {
-        didSet { defaults.set(try? JSONEncoder().encode(shortcut), forKey: Key.shortcut); onChange?() }
-    }
-    /// True while the settings window is capturing a new shortcut, so the old one can't fire.
-    @Published var isRecording = false {
+    /// The keybind whose shortcut or mouse button is being captured. Nothing fires meanwhile.
+    @Published var recordingID: UUID? {
         didSet { onChange?() }
     }
 
     @Published var needsPermission = false
-    @Published var shortcutUnavailable = false
+    /// Key shortcuts that another app or macOS already uses.
+    @Published var unavailableShortcuts: Set<UUID> = []
+
+    var isRecording: Bool { recordingID != nil }
 
     init() {
-        mode = TriggerMode(rawValue: defaults.string(forKey: Key.mode) ?? "") ?? .doubleTap
-        modifier = ModifierKey(rawValue: defaults.string(forKey: Key.modifier) ?? "") ?? .command
         tapWindow = defaults.object(forKey: Key.tapWindow) as? Double ?? 0.3
-        shortcut = defaults.data(forKey: Key.shortcut).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) }
+        if let saved = defaults.data(forKey: Key.keybinds).flatMap({ try? JSONDecoder().decode([Keybind].self, from: $0) }) {
+            keybinds = saved
+        } else {
+            let shortcut = defaults.data(forKey: Key.shortcut).flatMap { try? JSONDecoder().decode(Shortcut.self, from: $0) }
+            keybinds = Keybind.migrated(mode: defaults.string(forKey: Key.mode),
+                                        modifier: defaults.string(forKey: Key.modifier), shortcut: shortcut)
+        }
     }
 }

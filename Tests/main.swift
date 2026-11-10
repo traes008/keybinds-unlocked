@@ -50,6 +50,21 @@ check("a key right before the first press cancels", taps(quick, otherInputAt: 9.
 check("a key after it fired doesn't matter", taps(quick, otherInputAt: 10.17), 1)
 check("cmd+C then cmd+V quickly doesn't fire", taps([(cmd, 10), (0, 10.12), (cmd, 10.25), (0, 10.4)], otherInputAt: 10.06), 0)
 
+let recorded = Shortcut(keyCode: 46, carbonModifiers: 0x1800, display: "⌃⌥M")
+check("upgrade: double tap keeps its key", Keybind.migrated(mode: "doubleTap", modifier: "option", shortcut: nil).map(\.trigger), [.doubleTap(.option)])
+check("upgrade: shortcut is kept", Keybind.migrated(mode: "shortcut", modifier: "command", shortcut: recorded).map(\.trigger), [.shortcut(recorded)])
+check("upgrade: shortcut mode without a shortcut falls back", Keybind.migrated(mode: "shortcut", modifier: nil, shortcut: nil).map(\.trigger), [.doubleTap(.command)])
+check("first launch: double-tap command", Keybind.migrated(mode: nil, modifier: nil, shortcut: nil).map(\.trigger), [.doubleTap(.command)])
+
+let several = [Keybind(trigger: .doubleTap(.command)), Keybind(trigger: .mouseButton(3)), Keybind(trigger: .shortcut(recorded)), Keybind(trigger: .mouseButton(nil))]
+check("keybinds survive saving and loading", (try? JSONDecoder().decode([Keybind].self, from: JSONEncoder().encode(several))) ?? [], several)
+
+check("mouse: left click can't be bound", MouseButton.isBindable(0), false)
+check("mouse: right click can't be bound", MouseButton.isBindable(1), false)
+check("mouse: side button can be bound", MouseButton.isBindable(3), true)
+check("mouse: middle button name", MouseButton.name(2), "Middle button")
+check("mouse: first side button name", MouseButton.name(3), "Mouse button 4")
+
 check("shortcut: ctrl+opt+M", Shortcut.make(keyCode: 46, held: [.control, .option], characters: "m"),
       Shortcut(keyCode: 46, carbonModifiers: 0x1800, display: "⌃⌥M"))
 check("shortcut: plain letter refused", Shortcut.make(keyCode: 46, held: [], characters: "m"), nil)

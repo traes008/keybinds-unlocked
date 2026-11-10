@@ -2,13 +2,43 @@ import Foundation
 
 // The trigger logic. Pure Swift with no system calls, so scripts/check.sh can test it directly.
 
-enum TriggerMode: String, CaseIterable, Identifiable {
-    case doubleTap, shortcut
-    var id: String { rawValue }
+/// What sets a keybind off. A shortcut or mouse button is nil until one has been recorded.
+enum Trigger: Codable, Equatable {
+    case doubleTap(ModifierKey)
+    case shortcut(Shortcut?)
+    case mouseButton(Int?)
+}
+
+/// One way of opening Mission Control. There can be any number of them.
+struct Keybind: Codable, Equatable, Identifiable {
+    var id = UUID()
+    var trigger: Trigger
+
+    /// The keybinds for someone coming from the version that had a single trigger.
+    static func migrated(mode: String?, modifier: String?, shortcut: Shortcut?) -> [Keybind] {
+        if mode == "shortcut", let shortcut {
+            return [Keybind(trigger: .shortcut(shortcut))]
+        }
+        return [Keybind(trigger: .doubleTap(ModifierKey(rawValue: modifier ?? "") ?? .command))]
+    }
+}
+
+/// Mouse buttons by their system number: 0 is left, 1 is right, 2 is the middle button, and the
+/// side buttons follow.
+enum MouseButton {
+    /// Left and right can't be bound: that would stop you clicking.
+    static func isBindable(_ number: Int) -> Bool {
+        number >= 2
+    }
+
+    /// Named the way mice and their software count them, starting at 1.
+    static func name(_ number: Int) -> String {
+        number == 2 ? "Middle button" : "Mouse button \(number + 1)"
+    }
 }
 
 /// A modifier key that can be double-tapped. `mask` is its bit in a CGEvent's flags (either side of the keyboard).
-enum ModifierKey: String, CaseIterable, Identifiable {
+enum ModifierKey: String, CaseIterable, Identifiable, Codable {
     case command, option, control, shift, function
 
     var id: String { rawValue }
