@@ -82,8 +82,11 @@ final class TriggerEngine {
     }
 
     private func removeTap() {
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), tapSource, .commonModes) }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap) // otherwise macOS keeps the switched-off tap registered
+        }
         tap = nil
         tapSource = nil
         tapMask = 0
