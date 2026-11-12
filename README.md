@@ -12,14 +12,13 @@ https://traes008.github.io/keybinds-unlocked/
 
 ## Install
 
-No download yet. Build it in Xcode:
-
-1. Open `KeybindsUnlocked.xcodeproj`.
-2. Under Signing & Capabilities, pick your own team (a free Apple account works).
-3. Run, then move the app to Applications.
-4. Allow it under Privacy & Security → Accessibility.
+1. [Download KeybindsUnlocked.zip](https://traes008.github.io/keybinds-unlocked/KeybindsUnlocked.zip), unzip it and move the app to Applications.
+2. Open it. macOS blocks it because it isn't signed by Apple: go to System Settings → Privacy & Security and click **Open Anyway**.
+3. Allow it under Privacy & Security → Accessibility.
 
 No menu bar icon. Open the app again for its settings.
+
+Or build it yourself: open `KeybindsUnlocked.xcodeproj` in Xcode, pick your own team under Signing & Capabilities, and run.
 
 ## Notes
 
