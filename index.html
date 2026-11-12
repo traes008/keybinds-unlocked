@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keybinds Unlocked: keybinds macOS doesn't offer</title>
+<meta name="description" content="A small Mac app that opens Mission Control, shows your windows or shows the desktop from a double tap of a modifier key, a key shortcut or a mouse side button.">
+<link rel="icon" type="image/png" href="icon.png">
+<style>
+:root {
+  --bg: #f6f5f1;
+  --ink: #1d1c1a;
+  --soft: #66625a;
+  --line: #dcd9d0;
+  --panel: #ffffff;
+  --accent: #a86a00;
+  --window: #2f5d8a;
+  --dock: #1d1c1a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171614;
+    --ink: #f1efe9;
+    --soft: #a39e93;
+    --line: #35322d;
+    --panel: #22201d;
+    --accent: #ffc53d;
+    --window: #6d9fce;
+    --dock: #f1efe9;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 18px/1.55 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 72px 24px 56px; }
+.name { font-weight: 700; letter-spacing: -0.01em; margin: 0 0 56px; display: flex; align-items: center; gap: 12px; }
+.name img { width: 44px; height: 44px; }
+a { color: var(--accent); }
+.get { display: inline-block; margin: 24px 0 0; padding: 12px 20px; border-radius: 12px; background: var(--ink); color: var(--bg); font-weight: 600; text-decoration: none; }
+.note { color: var(--soft); font-size: 15px; margin: 12px 0 0; }
+h1 { font-size: clamp(38px, 8vw, 62px); line-height: 1.04; letter-spacing: -0.03em; margin: 0 0 20px; }
+.lead { font-size: 21px; color: var(--soft); margin: 0 0 12px; max-width: 34em; }
+.status { display: inline-block; margin: 20px 0 0; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 15px; color: var(--soft); }
+
+.keys { margin: 56px 0 64px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.key { background: var(--panel); border: 2px solid var(--line); border-bottom-width: 6px; border-radius: 12px; padding: 14px 20px; font-weight: 600; }
+.then { color: var(--soft); }
+
+h2 { font-size: 26px; letter-spacing: -0.02em; margin: 56px 0 12px; }
+p { margin: 0 0 14px; }
+ul { margin: 0; padding: 0; list-style: none; }
+li { padding: 14px 0; border-top: 1px solid var(--line); }
+li strong { display: block; }
+li span { color: var(--soft); }
+footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--soft); font-size: 15px; }
+</style>
+</head>
+<body>
+<main>
+  <p class="name"><img src="icon.png" alt="">Keybinds Unlocked</p>
+
+  <h1>The keybinds macOS won't give you.</h1>
+  <p class="lead">Double-tap Command to open Mission Control. Press a side button on your mouse to show the desktop. macOS has no setting for the first, and its setting for the second doesn't always work.</p>
+  <p class="lead">Keybinds Unlocked adds them, and stays out of the way.</p>
+  <a class="get" href="https://github.com/traes008/keybinds-unlocked">Get it on GitHub</a>
+  <p class="note">Free and open source, for macOS 13 or later. There is no ready-made download yet: you build it yourself with Xcode, which takes a few minutes.</p>
+
+  <div class="keys" role="img" aria-label="Examples: Command pressed twice opens Mission Control, mouse button 5 shows the desktop.">
+    <span class="key">⌘</span><span class="key">⌘</span><span class="then">opens Mission Control</span>
+  </div>
+
+  <h2>What you can press</h2>
+  <ul>
+    <li><strong>A double tap of a modifier key</strong><span>Command, Option, Control, Shift or Fn. Shortcuts like ⌘C don't set it off, and you choose how quick the taps must be.</span></li>
+    <li><strong>A mouse button</strong><span>The middle button or any side button. The app takes the button over, so it won't also go back a page in your browser.</span></li>
+    <li><strong>A key shortcut</strong><span>Any combination you record.</span></li>
+  </ul>
+
+  <h2>What it can do</h2>
+  <ul>
+    <li><strong>Mission Control</strong><span>All your windows and Spaces.</span></li>
+    <li><strong>Application Windows</strong><span>The windows of the app you're in.</span></li>
+    <li><strong>Show Desktop</strong><span>Move everything aside.</span></li>
+  </ul>
+
+  <h2>Good to know</h2>
+  <p>Add as many keybinds as you like, each with its own action. Double taps and mouse buttons need Accessibility permission so the app can notice those presses. It only watches modifier keys and the mouse buttons you bind: your typing never passes through it, and nothing leaves your Mac.</p>
+  <p>It runs in the background with no menu bar icon and uses next to no battery. Open the app again to change its settings.</p>
+
+  <footer>Keybinds Unlocked is an independent app and isn't affiliated with Apple. <a href="https://github.com/traes008/keybinds-unlocked">Source code</a>, MIT licence.</footer>
+</main>
+</body>
+</html>
