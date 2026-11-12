@@ -18,7 +18,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Open Mission Control with") {
+            Section("Keybinds") {
                 if state.keybinds.isEmpty {
                     Text("No keybinds yet.").foregroundStyle(.secondary)
                 }
@@ -65,7 +65,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
+        .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
         .onDisappear(perform: recorder.stop)
     }
@@ -104,7 +104,6 @@ struct KeybindRow: View {
                 switch keybind.trigger {
                 case .doubleTap(let key):
                     Text("Double-tap")
-                    Spacer()
                     Picker("Key", selection: Binding(get: { key }, set: { keybind.trigger = .doubleTap($0) })) {
                         ForEach(ModifierKey.allCases) { Text($0.title).tag($0) }
                     }
@@ -112,17 +111,21 @@ struct KeybindRow: View {
                     .fixedSize()
                 case .shortcut(let shortcut):
                     Text("Key shortcut")
-                    Spacer()
                     Button(isRecording ? "Press keys… (Esc cancels)" : shortcut?.display ?? "Click to record") {
                         recorder.toggle(keybind)
                     }
                 case .mouseButton(let number):
-                    Text("Mouse button")
-                    Spacer()
-                    Button(isRecording ? "Press a mouse button… (Esc cancels)" : number.map(MouseButton.name) ?? "Click to record") {
+                    Button(isRecording ? "Press a button… (Esc cancels)" : number.map(MouseButton.name) ?? "Click to record") {
                         recorder.toggle(keybind)
                     }
                 }
+                Spacer()
+                Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                Picker("Action", selection: $keybind.action) {
+                    ForEach(Action.allCases) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
                 Button {
                     if isRecording { recorder.stop() }
                     state.keybinds.removeAll { $0.id == keybind.id }

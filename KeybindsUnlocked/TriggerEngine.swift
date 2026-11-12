@@ -2,11 +2,11 @@ import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
 
-/// Watches for every keybind's trigger and opens Mission Control when one happens.
+/// Watches for every keybind's trigger and carries out its action when one happens.
 final class TriggerEngine {
     private let state: AppState
-    private var detectors: [DoubleTapDetector] = []
-    private var mouseButtons: Set<Int64> = []
+    private var detectors: [(detector: DoubleTapDetector, action: Action)] = []
+    private var mouseButtons: [Int64: Action] = [:]
     /// Bound buttons that are held down: their release is swallowed too, so no app sees half a click.
     private var swallowedButtons: Set<Int64> = []
 
@@ -18,6 +18,8 @@ final class TriggerEngine {
 
     private var hotKeys: [EventHotKeyRef] = []
     private var armedShortcuts: [Shortcut] = []
+    /// The action of each registered shortcut, in the order they were registered.
+    private var shortcutActions: [Action] = []
     private var hotKeyHandlerInstalled = false
 
     init(state: AppState) {
@@ -29,23 +31,28 @@ final class TriggerEngine {
         // Nothing fires while a shortcut or button is being recorded
         let keybinds = state.isRecording ? [] : state.keybinds
 
-        var modifiers: [ModifierKey] = []
-        var buttons: Set<Int64> = []
-        var shortcuts: [(id: UUID, shortcut: Shortcut)] = []
+        // If two keybinds share a trigger, the first one wins
+        var doubleTaps: [(key: ModifierKey, action: Action)] = []
+        var buttons: [Int64: Action] = [:]
+        var shortcuts: [(id: UUID, shortcut: Shortcut, action: Action)] = []
         for keybind in keybinds {
             switch keybind.trigger {
-            case .doubleTap(let key): if !modifiers.contains(key) { modifiers.append(key) }
-            case .mouseButton(let number?): buttons.insert(Int64(number))
-            case .shortcut(let shortcut?): shortcuts.append((keybind.id, shortcut))
-            case .mouseButton(nil), .shortcut(nil): break
+            case .doubleTap(let key):
+                if !doubleTaps.contains(where: { $0.key == key }) { doubleTaps.append((key, keybind.action)) }
+            case .mouseButton(let number?):
+                if buttons[Int64(number)] == nil { buttons[Int64(number)] = keybind.action }
+            case .shortcut(let shortcut?):
+                shortcuts.append((keybind.id, shortcut, keybind.action))
+            case .mouseButton(nil), .shortcut(nil):
+                break
             }
         }
 
-        detectors = modifiers.map {
+        detectors = doubleTaps.map {
             var detector = DoubleTapDetector()
-            detector.key = $0
+            detector.key = $0.key
             detector.tapWindow = state.tapWindow
-            return detector
+            return (detector, $0.action)
         }
         mouseButtons = buttons
 
@@ -107,17 +114,15 @@ final class TriggerEngine {
         case .flagsChanged:
             let now = ProcessInfo.processInfo.systemUptime
             let lastOtherInputAt = now - Self.secondsSinceOtherInput()
-            var fired = false
             for index in detectors.indices
-            where detectors[index].flagsChanged(event.flags.rawValue, at: now, lastOtherInputAt: lastOtherInputAt) {
-                fired = true
+            where detectors[index].detector.flagsChanged(event.flags.rawValue, at: now, lastOtherInputAt: lastOtherInputAt) {
+                fire(detectors[index].action) // outside the event callback, so typing never waits on it
             }
-            if fired { fire() } // outside the event callback, so typing never waits on it
         case .otherMouseDown:
             let button = event.getIntegerValueField(.mouseEventButtonNumber)
-            guard mouseButtons.contains(button) else { return false }
+            guard let action = mouseButtons[button] else { return false }
             swallowedButtons.insert(button)
-            fire()
+            fire(action)
             return true
         case .otherMouseUp:
             return swallowedButtons.remove(event.getIntegerValueField(.mouseEventButtonNumber)) != nil
@@ -155,7 +160,8 @@ final class TriggerEngine {
 
     // MARK: Key shortcuts
 
-    private func armHotKeys(_ shortcuts: [(id: UUID, shortcut: Shortcut)]) {
+    private func armHotKeys(_ shortcuts: [(id: UUID, shortcut: Shortcut, action: Action)]) {
+        shortcutActions = shortcuts.map(\.action)
         // Unchanged shortcuts stay registered: this runs on every settings change
         guard shortcuts.map(\.shortcut) != armedShortcuts else { return }
         hotKeys.forEach { UnregisterEventHotKey($0) }
@@ -181,11 +187,20 @@ final class TriggerEngine {
     private func installHotKeyHandler() {
         guard !hotKeyHandlerInstalled else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let status = InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
-            if let userData { Unmanaged<TriggerEngine>.fromOpaque(userData).takeUnretainedValue().fire() }
+        let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData in
+            var id = EventHotKeyID()
+            let found = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                          nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
+            if found == noErr, let userData {
+                Unmanaged<TriggerEngine>.fromOpaque(userData).takeUnretainedValue().shortcutPressed(Int(id.id) - 1)
+            }
             return noErr
         }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), nil)
         hotKeyHandlerInstalled = status == noErr
+    }
+
+    private func shortcutPressed(_ index: Int) {
+        if shortcutActions.indices.contains(index) { fire(shortcutActions[index]) }
     }
 
     // MARK: Action
@@ -193,19 +208,19 @@ final class TriggerEngine {
     private typealias DockNotification = @convention(c) (CFString, Int32) -> Void
 
     /// Asks the Dock directly, which is instant. macOS has no public API for this, so the private
-    /// function is looked up at runtime; if Apple removes it, `fire` falls back to launching the
-    /// Mission Control app, which works but takes noticeably longer.
+    /// function is looked up at runtime; if Apple removes it, Mission Control falls back to
+    /// launching its app, which works but takes noticeably longer. The other actions have no fallback.
     private static let sendToDock: DockNotification? = {
         let path = "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
         guard let handle = dlopen(path, RTLD_LAZY), let symbol = dlsym(handle, "CoreDockSendNotification") else { return nil }
         return unsafeBitCast(symbol, to: DockNotification.self)
     }()
 
-    private func fire() {
+    private func fire(_ action: Action) {
         DispatchQueue.main.async {
             if let sendToDock = Self.sendToDock {
-                sendToDock("com.apple.expose.awake" as CFString, 0)
-            } else {
+                sendToDock(action.dockNotification as CFString, 0)
+            } else if action == .missionControl {
                 _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/open"), arguments: ["-a", "Mission Control"])
             }
         }

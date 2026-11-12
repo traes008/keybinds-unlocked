@@ -1,6 +1,6 @@
 # Keybinds Unlocked
 
-A macOS background app that opens Mission Control from any number of keybinds: a double tap of a modifier key, a key combination, or a mouse button such as a side button.
+A macOS background app for keybinds that macOS doesn't offer: a double tap of a modifier key, a key combination, or a mouse button such as a side button. Each one opens Mission Control, shows the application's windows or shows the desktop.
 
 ## How it works
 

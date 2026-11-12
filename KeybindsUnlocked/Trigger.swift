@@ -9,10 +9,47 @@ enum Trigger: Codable, Equatable {
     case mouseButton(Int?)
 }
 
-/// One way of opening Mission Control. There can be any number of them.
+/// What a keybind does. `dockNotification` is the name the Dock knows it by.
+enum Action: String, Codable, CaseIterable, Identifiable {
+    case missionControl, appWindows, showDesktop
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .missionControl: return "Mission Control"
+        case .appWindows: return "Application Windows"
+        case .showDesktop: return "Show Desktop"
+        }
+    }
+
+    var dockNotification: String {
+        switch self {
+        case .missionControl: return "com.apple.expose.awake"
+        case .appWindows: return "com.apple.expose.front.awake"
+        case .showDesktop: return "com.apple.showdesktop.awake"
+        }
+    }
+}
+
+/// A trigger and what it does. There can be any number of them.
 struct Keybind: Codable, Equatable, Identifiable {
     var id = UUID()
     var trigger: Trigger
+    var action = Action.missionControl
+
+    init(trigger: Trigger, action: Action = .missionControl) {
+        self.trigger = trigger
+        self.action = action
+    }
+
+    /// Keybinds saved before actions existed have none: they opened Mission Control.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        trigger = try values.decode(Trigger.self, forKey: .trigger)
+        action = try values.decodeIfPresent(Action.self, forKey: .action) ?? .missionControl
+    }
 
     /// The keybinds for someone coming from the version that had a single trigger.
     static func migrated(mode: String?, modifier: String?, shortcut: Shortcut?) -> [Keybind] {

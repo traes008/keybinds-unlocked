@@ -59,6 +59,13 @@ check("first launch: double-tap command", Keybind.migrated(mode: nil, modifier: 
 let several = [Keybind(trigger: .doubleTap(.command)), Keybind(trigger: .mouseButton(3)), Keybind(trigger: .shortcut(recorded)), Keybind(trigger: .mouseButton(nil))]
 check("keybinds survive saving and loading", (try? JSONDecoder().decode([Keybind].self, from: JSONEncoder().encode(several))) ?? [], several)
 
+let withoutAction = #"[{"id":"7E6C1B6E-58B1-4C8B-9B0B-0B1B5F0E7A11","trigger":{"mouseButton":{"_0":3}}}]"#
+let loaded = try? JSONDecoder().decode([Keybind].self, from: Data(withoutAction.utf8))
+check("keybind saved before actions existed still loads", loaded?.map(\.trigger), [.mouseButton(3)])
+check("and it opens Mission Control, as it did", loaded?.first?.action, .missionControl)
+check("a chosen action survives saving and loading",
+      (try? JSONDecoder().decode([Keybind].self, from: JSONEncoder().encode([Keybind(trigger: .mouseButton(4), action: .showDesktop)])))?.first?.action, .showDesktop)
+
 check("mouse: left click can't be bound", MouseButton.isBindable(0), false)
 check("mouse: right click can't be bound", MouseButton.isBindable(1), false)
 check("mouse: side button can be bound", MouseButton.isBindable(3), true)
